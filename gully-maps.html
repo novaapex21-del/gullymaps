@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Gully Maps – Hyperlocal Reality</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1a2e1a; }
+
+  :root {
+    --green-dark: #14532d;
+    --green: #166534;
+    --green-light: #22c55e;
+    --orange: #f97316;
+    --orange-dark: #ea580c;
+    --blue: #2563eb;
+    --red: #dc2626;
+    --bg: #f8fafc;
+    --shadow: 0 6px 20px rgba(0,0,0,.12);
+  }
+
+  /* Header */
+  header {
+    position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 1000;
+    background: linear-gradient(135deg, var(--green-dark), var(--green));
+    color: #fff; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; box-shadow: var(--shadow);
+  }
+  header .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+  header .brand i { color: var(--orange); font-size: 20px; }
+  header .actions { display: flex; gap: 8px; }
+  header button {
+    background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+    padding: 7px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; transition: background .2s;
+  }
+  header button:hover { background: rgba(255,255,255,0.22); }
+  header button.danger:hover { background: var(--red); border-color: var(--red); }
+
+  /* Map */
+  #map { position: absolute; top: 56px; bottom: 0; left: 0; right: 0; }
+
+  /* FAB */
+  .fab {
+    position: fixed; right: 20px; bottom: 24px; z-index: 1000;
+    width: 60px; height: 60px; border-radius: 50%;
+    background: var(--orange); color: #fff; border: none; cursor: pointer;
+    font-size: 26px; box-shadow: 0 8px 22px rgba(249,115,22,0.5);
+    transition: transform .15s, background .2s;
+  }
+  .fab:hover { background: var(--orange-dark); transform: scale(1.06); }
+  .fab:active { transform: scale(0.96); }
+
+  /* My Location */
+  .loc-btn {
+    position: fixed; right: 20px; bottom: 96px; z-index: 1000;
+    width: 46px; height: 46px; border-radius: 50%;
+    background: #fff; color: var(--green-dark); border: none; cursor: pointer;
+    font-size: 18px; box-shadow: var(--shadow);
+  }
+  .loc-btn:hover { color: var(--orange); }
+
+  /* Legend */
+  .legend {
+    position: fixed; left: 12px; bottom: 16px; z-index: 999;
+    background: rgba(255,255,255,0.96); padding: 10px 12px; border-radius: 10px;
+    box-shadow: var(--shadow); font-size: 12px;
+  }
+  .legend h4 { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; font-weight: 700; }
+  .legend .row { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+  .legend .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
+
+  /* Modal overlay */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+    z-index: 1500; display: none; align-items: center; justify-content: center;
+    padding: 16px; backdrop-filter: blur(2px);
+  }
+  .overlay.show { display: flex; animation: fade .2s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+  .panel {
+    background: #fff; border-radius: 16px; width: 100%; max-width: 420px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden;
+    animation: pop .2s ease;
+  }
+  @keyframes pop { from { transform: translateY(20px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+  .panel header.ph {
+    position: static; height: auto; padding: 14px 18px;
+    background: linear-gradient(135deg, var(--green-dark), var(--green));
+    color: #fff; display: flex; justify-content: space-between; align-items: center;
+    box-shadow: none;
+  }
+  .panel h2 { font-size: 16px; font-weight: 700; }
+  .close-x { background: transparent; border: none; color: #fff; font-size: 20px; cursor: pointer; }
+  .panel .body { padding: 18px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .4px; }
+  .field input, .field textarea, .field select {
+    width: 100%; padding: 10px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px;
+    font-size: 14px; font-family: inherit; outline: none; transition: border-color .15s;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--green-light); }
+  .field textarea { resize: vertical; min-height: 70px; }
+
+  .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .type-opt {
+    padding: 10px 6px; border: 2px solid #e2e8f0; border-radius: 10px;
+    background: #fff; cursor: pointer; text-align: center;
+    font-size: 12px; font-weight: 600; transition: all .15s;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .type-opt i { font-size: 18px; }
+  .type-opt:hover { transform: translateY(-1px); }
+  .type-opt.active { color: #fff; border-color: transparent; }
+  .type-opt[data-type="waterlogging"].active { background: var(--blue); }
+  .type-opt[data-type="shortcut"].active { background: var(--green-light); }
+  .type-opt[data-type="safety"].active { background: var(--red); }
+  .type-opt[data-type="waterlogging"] i { color: var(--blue); }
+  .type-opt[data-type="shortcut"] i { color: var(--green-light); }
+  .type-opt[data-type="safety"] i { color: var(--red); }
+  .type-opt.active i { color: #fff; }
+
+  .submit-btn {
+    width: 100%; padding: 12px; border: none; border-radius: 10px;
+    background: var(--orange); color: #fff; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: background .2s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .submit-btn:hover { background: var(--orange-dark); }
+
+  .coords { font-size: 11px; color: #64748b; margin-top: -6px; }
+
+  /* Marker custom icon */
+  .gm-marker {
+    width: 30px; height: 30px; border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 13px; box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+    border: 2px solid #fff;
+  }
+  .gm-marker i { transform: rotate(45deg); }
+  .gm-marker.waterlogging { background: var(--blue); }
+  .gm-marker.shortcut { background: var(--green-light); }
+  .gm-marker.safety { background: var(--red); }
+
+  /* Popup */
+  .leaflet-popup-content-wrapper { border-radius: 12px; padding: 0; overflow: hidden; }
+  .leaflet-popup-content { margin: 0; width: 240px !important; }
+  .pop {
+    font-family: inherit;
+  }
+  .pop .pop-head { padding: 10px 12px; color: #fff; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
+  .pop .pop-head.waterlogging { background: var(--blue); }
+  .pop .pop-head.shortcut { background: var(--green-light); }
+  .pop .pop-head.safety { background: var(--red); }
+  .pop img { width: 100%; max-height: 140px; object-fit: cover; display: block; }
+  .pop .pop-body { padding: 10px 12px; }
+  .pop .desc { font-size: 13px; color: #1e293b; margin-bottom: 8px; line-height: 1.4; word-wrap: break-word; }
+  .pop .time { font-size: 11px; color: #64748b; margin-bottom: 10px; }
+  .pop .votes { display: flex; gap: 8px; }
+  .pop .vote {
+    flex: 1; padding: 7px; border: 1.5px solid #e2e8f0; background: #fff; border-radius: 8px;
+    cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .pop .vote.up { color: var(--green); }
+  .pop .vote.down { color: var(--red); }
+  .pop .vote:hover { background: #f1f5f9; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 24px;
+    font-size: 13px; z-index: 2000; box-shadow: var(--shadow);
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-10px); }
+
+  @media (max-width: 480px) {
+    header .brand { font-size: 15px; }
+    header button span { display: none; }
+    .legend { font-size: 11px; padding: 8px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><i class="fa-solid fa-map-location-dot"></i> Gully Maps</div>
+  <div class="actions">
+    <button id="clearBtn" class="danger" title="Clear all data"><i class="fa-solid fa-trash"></i><span> Clear</span></button>
+  </div>
+</header>
+
+<div id="map"></div>
+
+<button class="loc-btn" id="locBtn" title="My location"><i class="fa-solid fa-location-crosshairs"></i></button>
+<button class="fab" id="addBtn" title="Add report"><i class="fa-solid fa-plus"></i></button>
+
+<div class="legend">
+  <h4>Legend</h4>
+  <div class="row"><span class="dot" style="background:var(--blue)"></span> Waterlogging <span style="color:#94a3b8">· 24h</span></div>
+  <div class="row"><span class="dot" style="background:var(--green-light)"></span> Shortcut <span style="color:#94a3b8">· 7d</span></div>
+  <div class="row"><span class="dot" style="background:var(--red)"></span> Safety <span style="color:#94a3b8">· 30d</span></div>
+</div>
+
+<!-- Add Report Modal -->
+<div class="overlay" id="overlay">
+  <div class="panel">
+    <header class="ph">
+      <h2><i class="fa-solid fa-circle-plus"></i> Add Report</h2>
+      <button class="close-x" id="closeBtn"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+    <div class="body">
+      <div class="field">
+        <label>Type</label>
+        <div class="type-grid" id="typeGrid">
+          <button type="button" class="type-opt active" data-type="waterlogging"><i class="fa-solid fa-droplet"></i>Waterlog</button>
+          <button type="button" class="type-opt" data-type="shortcut"><i class="fa-solid fa-route"></i>Shortcut</button>
+          <button type="button" class="type-opt" data-type="safety"><i class="fa-solid fa-triangle-exclamation"></i>Safety</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <textarea id="descInput" placeholder="What's happening here?" maxlength="280"></textarea>
+      </div>
+      <div class="field">
+        <label>Photo URL (optional)</label>
+        <input type="url" id="photoInput" placeholder="https://..." />
+      </div>
+      <div class="field">
+        <label>Location</label>
+        <div class="coords" id="coordsLabel">Tap on the map to choose</div>
+      </div>
+      <button class="submit-btn" id="submitBtn"><i class="fa-solid fa-paper-plane"></i> Submit Report</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(() => {
+  const STORAGE_KEY = 'gullyMapsReports';
+  const TTL = {
+    waterlogging: 24 * 60 * 60 * 1000,
+    shortcut: 7 * 24 * 60 * 60 * 1000,
+    safety: 30 * 24 * 60 * 60 * 1000,
+  };
+  const TYPE_ICONS = {
+    waterlogging: 'fa-droplet',
+    shortcut: 'fa-route',
+    safety: 'fa-triangle-exclamation',
+  };
+  const TYPE_LABELS = {
+    waterlogging: 'Waterlogging',
+    shortcut: 'Shortcut',
+    safety: 'Safety',
+  };
+
+  // ---------- Storage ----------
+  function loadReports() {
+    try {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      const now = Date.now();
+      const fresh = data.filter(r => (now - r.timestamp) < TTL[r.type]);
+      if (fresh.length !== data.length) saveReports(fresh);
+      return fresh;
+    } catch { return []; }
+  }
+  function saveReports(reports) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+  }
+
+  // ---------- Map ----------
+  const map = L.map('map', { zoomControl: false }).setView([19.0760, 72.8777], 13); // Mumbai default
+  L.control.zoom({ position: 'topright' }).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+
+  const markersLayer = L.layerGroup().addTo(map);
+
+  function makeIcon(type) {
+    return L.divIcon({
+      className: '',
+      html: `<div class="gm-marker ${type}"><i class="fa-solid ${TYPE_ICONS[type]}"></i></div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 30],
+      popupAnchor: [0, -28],
+    });
+  }
+
+  function timeAgo(ts) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return 'just now';
+    const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24); return `${d}d ago`;
+  }
+
+  function popupHtml(r) {
+    const photo = r.photo ? `<img src="${escapeHtml(r.photo)}" alt="" onerror="this.style.display='none'">` : '';
+    const desc = r.description ? `<div class="desc">${escapeHtml(r.description)}</div>` : '<div class="desc" style="color:#94a3b8;font-style:italic">No description</div>';
+    return `
+      <div class="pop">
+        <div class="pop-head ${r.type}"><i class="fa-solid ${TYPE_ICONS[r.type]}"></i> ${TYPE_LABELS[r.type]}</div>
+        ${photo}
+        <div class="pop-body">
+          ${desc}
+          <div class="time"><i class="fa-regular fa-clock"></i> ${timeAgo(r.timestamp)}</div>
+          <div class="votes">
+            <button class="vote up" data-id="${r.id}" data-act="up"><i class="fa-solid fa-arrow-up"></i> ${r.upvotes}</button>
+            <button class="vote down" data-id="${r.id}" data-act="down"><i class="fa-solid fa-arrow-down"></i> ${r.downvotes}</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderMarkers() {
+    markersLayer.clearLayers();
+    const reports = loadReports();
+    reports.forEach(r => {
+      const marker = L.marker([r.lat, r.lng], { icon: makeIcon(r.type) })
+        .bindPopup(popupHtml(r));
+      marker.on('popupopen', (e) => {
+        const el = e.popup.getElement();
+        el.querySelectorAll('.vote').forEach(btn => {
+          btn.addEventListener('click', () => {
+            handleVote(btn.dataset.id, btn.dataset.act, marker);
+          });
+        });
+      });
+      markersLayer.addLayer(marker);
+    });
+  }
+
+  function handleVote(id, act, marker) {
+    const reports = loadReports();
+    const r = reports.find(x => x.id === id);
+    if (!r) return;
+    if (act === 'up') r.upvotes++; else r.downvotes++;
+    saveReports(reports);
+    marker.setPopupContent(popupHtml(r));
+  }
+
+  // ---------- Add report flow ----------
+  const overlay = document.getElementById('overlay');
+  const closeBtn = document.getElementById('closeBtn');
+  const addBtn = document.getElementById('addBtn');
+  const submitBtn = document.getElementById('submitBtn');
+  const descInput = document.getElementById('descInput');
+  const photoInput = document.getElementById('photoInput');
+  const coordsLabel = document.getElementById('coordsLabel');
+  const typeGrid = document.getElementById('typeGrid');
+
+  let pendingLatLng = null;
+  let selectedType = 'waterlogging';
+  let pickingMode = false;
+  let pickingMarker = null;
+
+  typeGrid.addEventListener('click', (e) => {
+    const btn = e.target.closest('.type-opt');
+    if (!btn) return;
+    typeGrid.querySelectorAll('.type-opt').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedType = btn.dataset.type;
+  });
+
+  function openForm(latlng) {
+    pendingLatLng = latlng;
+    coordsLabel.textContent = latlng
+      ? `📍 ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`
+      : 'Tap on the map to choose';
+    overlay.classList.add('show');
+  }
+  function closeForm() {
+    overlay.classList.remove('show');
+    descInput.value = '';
+    photoInput.value = '';
+    pendingLatLng = null;
+    if (pickingMarker) { map.removeLayer(pickingMarker); pickingMarker = null; }
+    pickingMode = false;
+    document.getElementById('map').style.cursor = '';
+  }
+
+  closeBtn.addEventListener('click', closeForm);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeForm(); });
+
+  addBtn.addEventListener('click', () => {
+    // Default to map center for quick add
+    openForm(map.getCenter());
+    showToast('Tap map to set exact location');
+  });
+
+  map.on('click', (e) => {
+    if (overlay.classList.contains('show')) {
+      pendingLatLng = e.latlng;
+      coordsLabel.textContent = `📍 ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+      if (pickingMarker) map.removeLayer(pickingMarker);
+      pickingMarker = L.marker(e.latlng, { opacity: 0.7 }).addTo(map);
+    } else {
+      openForm(e.latlng);
+      if (pickingMarker) map.removeLayer(pickingMarker);
+      pickingMarker = L.marker(e.latlng, { opacity: 0.7 }).addTo(map);
+    }
+  });
+
+  submitBtn.addEventListener('click', () => {
+    if (!pendingLatLng) { showToast('Please pick a location'); return; }
+    const desc = descInput.value.trim();
+    const photo = photoInput.value.trim();
+    const report = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      type: selectedType,
+      lat: pendingLatLng.lat,
+      lng: pendingLatLng.lng,
+      description: desc,
+      photo: photo,
+      timestamp: Date.now(),
+      upvotes: 0,
+      downvotes: 0,
+    };
+    const reports = loadReports();
+    reports.push(report);
+    saveReports(reports);
+    closeForm();
+    renderMarkers();
+    showToast('Report added!');
+  });
+
+  // ---------- My location ----------
+  document.getElementById('locBtn').addEventListener('click', () => {
+    if (!navigator.geolocation) { showToast('Geolocation not supported'); return; }
+    showToast('Locating...');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        map.setView([latitude, longitude], 16);
+      },
+      () => showToast('Could not get location'),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  });
+
+  // ---------- Clear ----------
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    if (!confirm('Clear ALL reports from this device? This cannot be undone.')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    renderMarkers();
+    showToast('All reports cleared');
+  });
+
+  // ---------- Toast ----------
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // ---------- Init ----------
+  renderMarkers();
+  // Refresh markers every minute (timeAgo + expiry)
+  setInterval(renderMarkers, 60 * 1000);
+})();
+</script>
+</body>
+</html>
